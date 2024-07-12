@@ -49,7 +49,7 @@ class WMSLatencyEvaluation(object):
 
         #csv output file
         outFl = open(os.path.join(self._outPath,"GetCapabilitiesEvaluation.csv"), "w")
-        outFl.write("Repeats,Mean,median,StDev\n")
+        outFl.write("Repeats,Mean (s),Median (s),Standard Deviation (s)\n")
         outFl.write("{0},{1},{2},{3}\n".format(repeats,timeMean,md, timeStDev))
         outFl.close()
         
@@ -120,13 +120,13 @@ class WMSLatencyEvaluation(object):
 
         # csv output file
         outFl = open(os.path.join(self._outPath,"GetMapEvaluation.csv"), "w")
-        outFl.write("Layer,Repeats,Mean,median,StDev\n")
+        outFl.write("Layer,Repeats,Mean (s),Median (s),Standard Deviation (s)\n")
 
         for layerName in layerKeys:
             layerrepeats = len(layerMedian[layerName])
             if layerrepeats > 0:
                 layerMean[layerName] /= layerrepeats
-                layerStdev[layerName] /= layerrepeats
+                layerStdev[layerName] = np.sqrt(layerStdev[layerName]/layerrepeats - layerMean[layerName]*layerMean[layerName])
                 layerMedian[layerName].sort()
                 md = layerMedian[layerName][int(np.floor(layerrepeats / 2))]
                 outFl.write("{0},{1},{2},{3},{4}\n".format(layerName, layerrepeats, layerMean[layerName], md,
