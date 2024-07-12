@@ -1,7 +1,9 @@
 import numpy as np, os, random, requests, sys, time, xml.etree.ElementTree as ET
+from osgeo import ogr
+ogr.DontUseExceptions()
 
 class WMSLatencyEvaluation(object):
-    def __init__(self, instanceId, outPath):
+    def __init__(self, instanceId, validMaskFile, outPath):
         self._instanceId = instanceId
         self._baseURL = "https://sh.dataspace.copernicus.eu/ogc/wms/{0}".format(instanceId)
         self._outPath = outPath
@@ -12,6 +14,10 @@ class WMSLatencyEvaluation(object):
             "maxX": 20037508.34,
             "maxY": 20048966.1
         }
+        inDt = ogr.Open(validMaskFile)
+        inLayer = inDt.GetLayer()
+        self._ft = inLayer.GetNextFeature()
+
     def __getLayers(self, xmlString):
         data = ET.fromstring(xmlString)
         for layer in data.findall(".//{http://www.opengis.net/wms}Layer[@queryable=\'1\']"):
@@ -55,7 +61,7 @@ class WMSLatencyEvaluation(object):
         
         self.__getLayers(response.text)
 
-    def testGetMap(self, repeats=100, width = 1340, height=717):
+    def testGetMap(self, repeats=100, width = 1237, height=589):
         layerKeys = list(self._layers.keys())
 
         timeMean = 0
@@ -73,15 +79,26 @@ class WMSLatencyEvaluation(object):
             layerMedian[key] = []
 
         for i in range(repeats):
-            minX = random.uniform(self._epsg3857["minX"], self._epsg3857["maxX"] - width*1000)
-            minY = random.uniform(self._epsg3857["minY"], self._epsg3857["maxY"] - height*1000)
-            maxX = minX + width*1000
-            maxY = minY + height*1000
+            #getting an origin within the valid mask
+            inMask = False
+            minX = 0
+            minY = 0
+            while (not inMask):
+                minX = random.uniform(self._epsg3857["minX"], self._epsg3857["maxX"])
+                minY = random.uniform(self._epsg3857["minY"], self._epsg3857["maxY"])
+
+                pnt = ogr.Geometry(ogr.wkbPoint)
+                pnt.SetPoint_2D(0, minX, minY)
+                inMask = self._ft.GetGeometryRef().Intersects(pnt)
+
+            maxX = minX + width*19.2720933430599
+            maxY = minY + height*19.2720933430599
 
             layerId = random.randint(0,len(self._layers)-1)
             layerName = layerKeys[layerId]
             styleId = random.randint(0, len(self._layers[layerName])-1)
             style  = self._layers[layerName][styleId]
+
             params = {
                 "REQUEST": "GetMap",
                 "SERVICE": "WMS",
@@ -95,9 +112,9 @@ class WMSLatencyEvaluation(object):
                 "WIDTH":width,
                 "HEIGHT":height,
             }
-
             response = requests.get(self._baseURL, params=params)
             #print(response.url)
+
             tm = response.elapsed.total_seconds()
             median[i] = tm
             timeMean += tm / repeats
@@ -140,12 +157,12 @@ class WMSLatencyEvaluation(object):
 
 def main():
     if len(sys.argv) < 4:
-        print("usage: python wms_latency_evaluation.py cdse_instance_id output_report_path repeats")
+        print("usage: python wms_latency_evaluation.py cdse_instance_id valid_mask_file output_report_path repeats")
         return 1
 
-    obj = WMSLatencyEvaluation(sys.argv[1], sys.argv[2])
-    obj.testGetCapabilities(int(sys.argv[3]))
-    obj.testGetMap(int(sys.argv[3]))
+    obj = WMSLatencyEvaluation(sys.argv[1], sys.argv[2], sys.argv[3])
+    obj.testGetCapabilities(int(sys.argv[4]))
+    obj.testGetMap(int(sys.argv[4]))
 
 if __name__ == "__main__":
     main()
